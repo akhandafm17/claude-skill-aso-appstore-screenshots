@@ -1,6 +1,6 @@
 ---
 name: aso-appstore-screenshots
-description: Generate high-converting App Store screenshots by analyzing your app's codebase, discovering core benefits, and creating ASO-optimized screenshot images using Nano Banana Pro.
+description: Generate high-converting App Store screenshots by analyzing your app's codebase, discovering core benefits, and creating ASO-optimized screenshot images using Nano Banana Pro via fal.ai or Replicate.
 user-invocable: true
 ---
 
@@ -210,24 +210,36 @@ This is critical for resumability. If the user comes back in a new conversation,
 
 ## GENERATION
 
-Once benefits and screenshot pairings are confirmed, generate the final App Store screenshots using Nano Banana Pro (via the Gemini MCP server).
+Once benefits and screenshot pairings are confirmed, generate the final App Store screenshots using Nano Banana Pro via fal.ai or Replicate.
 
 ### Prerequisites Check
 
-Before generating, verify the Gemini MCP server is available by checking that the `generate_image` tool exists. If it is NOT available, tell the user:
+Before generating, you need an API key for **fal.ai** or **Replicate**. Ask the user which platform they prefer and for their API key.
+
+If the user doesn't have one yet, guide them:
 
 ```
-⚠️ Gemini MCP server not detected. To generate screenshots, you need to set it up:
+To generate screenshots, you need an API key from one of these platforms:
 
-1. Install: npm install -g gemini-mcp
-2. Add to your Claude Code MCP config (~/.claude/settings.json or project .mcp.json)
-3. Restart Claude Code
-4. Run this skill again
+**fal.ai** (recommended — supports multi-image input for style consistency):
+1. Sign up at https://fal.ai
+2. Go to https://fal.ai/dashboard/keys to create an API key
+3. Pricing: ~$0.15 per image ($0.30 at 4K resolution)
 
-See: https://github.com/nicobailon/gemini-mcp for setup instructions.
+**Replicate**:
+1. Sign up at https://replicate.com
+2. Go to https://replicate.com/account/api-tokens to create a token
+3. Note: Replicate accepts one input image per call — fal.ai is better for the style template workflow
 ```
 
-Do NOT proceed with generation if the tool is unavailable.
+Once the user provides their API key and platform choice, store them in shell variables for the session:
+
+```bash
+PROVIDER="fal"       # or "replicate"
+API_KEY="user-key"
+```
+
+**IMPORTANT**: Do NOT save API keys to memory or files. They are session-only.
 
 ### App Store Connect Dimensions
 
@@ -319,22 +331,27 @@ This outputs pixel-perfect 1290×2796 PNGs with:
 
 The scaffolds are internal intermediates — do NOT show them to the user or ask for confirmation. Proceed immediately to Step 2 (Nano Banana enhancement).
 
-**Step 2: Enhance with Nano Banana Pro (3 versions in parallel)**
+**Step 2: Enhance with Nano Banana Pro (3 versions)**
 
-Make **3 parallel `edit_image` calls**. The parallel execution is critical — always fire all 3 calls in a single message, never sequentially.
+Use the `enhance.py` script to generate 3 enhanced versions in a single API call. The script lives in the skill directory alongside compose.py.
 
-For each of the 3 calls, use:
-- `prompt`: Enhancement instructions (see prompt templates below — different for first vs subsequent screenshots)
-- `images`: See below for which images to include
-- `outputPath`: Different path for each version:
-  - `./screenshots/01-[benefit-slug]/v1.jpg`
-  - `./screenshots/01-[benefit-slug]/v2.jpg`
-  - `./screenshots/01-[benefit-slug]/v3.jpg`
+```bash
+SKILL_DIR="$HOME/.claude/skills/aso-appstore-screenshots" && \
+python3 "$SKILL_DIR/enhance.py" \
+  --provider "$PROVIDER" \
+  --api-key "$API_KEY" \
+  --prompt "PROMPT_HERE" \
+  --images screenshots/01-[benefit-slug]/scaffold.png \
+  --outputs screenshots/01-[benefit-slug]/v1.jpg screenshots/01-[benefit-slug]/v2.jpg screenshots/01-[benefit-slug]/v3.jpg \
+  --aspect-ratio "9:16" \
+  --resolution "4K"
+```
+
+The prompt differs for the first screenshot vs subsequent ones — see templates below.
 
 #### First screenshot (no approved template yet)
 
-Use only the scaffold as input:
-- `images`: The scaffold via `filePath` pointing to `screenshots/01-[benefit-slug]/scaffold.png`
+Pass only the scaffold as input via `--images`:
 
 **First screenshot prompt template:**
 
@@ -361,9 +378,24 @@ The final result should look like it was designed by a professional App Store sc
 
 #### Subsequent screenshots (after first is approved)
 
-Use **two images** as input:
+Pass **two images** via `--images` (order matters — scaffold first, then style template):
+
+```bash
+SKILL_DIR="$HOME/.claude/skills/aso-appstore-screenshots" && \
+python3 "$SKILL_DIR/enhance.py" \
+  --provider "$PROVIDER" \
+  --api-key "$API_KEY" \
+  --prompt "PROMPT_HERE" \
+  --images screenshots/0N-[benefit-slug]/scaffold.png screenshots/final/01-[first-benefit-slug].jpg \
+  --outputs screenshots/0N-[benefit-slug]/v1.jpg screenshots/0N-[benefit-slug]/v2.jpg screenshots/0N-[benefit-slug]/v3.jpg \
+  --aspect-ratio "9:16" \
+  --resolution "4K"
+```
+
 1. The **scaffold** for this benefit (`screenshots/0N-[benefit-slug]/scaffold.png`) — defines the layout
 2. The **first approved screenshot** (`screenshots/final/01-[first-benefit-slug].jpg`) — defines the style template
+
+**Note**: fal.ai natively supports multiple input images. Replicate only accepts one image — if using Replicate, only the scaffold is sent and the style template guidance must be embedded in the prompt text instead.
 
 **Subsequent screenshot prompt template:**
 
@@ -390,11 +422,11 @@ The result must look like it was designed alongside the style template as part o
 No watermarks, no extra text, no app store UI chrome.
 ```
 
-**IMPORTANT — Consistency enforcement**: The scaffold guarantees consistent layout. The style template guarantees consistent visual treatment. If Nano Banana changes the text, layout, or deviates from the style template, regenerate.
+**IMPORTANT — Consistency enforcement**: The scaffold guarantees consistent layout. The style template guarantees consistent visual treatment. If Nano Banana Pro changes the text, layout, or deviates from the style template, regenerate by running enhance.py again.
 
 **Step 3: IMMEDIATELY crop and resize ALL 3 versions to App Store dimensions**
 
-⚠️ **You MUST run this immediately after all 3 `edit_image` calls complete. Do NOT show the user any image before running this. The raw Nano Banana output is always the wrong dimensions for App Store Connect.**
+⚠️ **You MUST run this immediately after enhance.py completes. Do NOT show the user any image before running this. The raw Nano Banana Pro output is always the wrong dimensions for App Store Connect.**
 
 **CRITICAL — Use exactly ONE Bash tool call for all 3 crop/resize operations.** Do NOT make 3 separate Bash calls. Do NOT use parallel Bash calls. Use the single loop below so the user only sees one permission prompt:
 
@@ -429,10 +461,22 @@ Label them clearly as **Version 1**, **Version 2**, and **Version 3** and ask th
 
 **Step 5: Iterate if needed**
 
-If the user wants changes, use `edit_image` with **three images** as input:
+If the user wants changes, run enhance.py with **three images** as input:
 1. The **scaffold** (`scaffold.png`) — anchors the layout (text position, device placement, screenshot)
 2. The **style template** (the first approved screenshot from `screenshots/final/01-*.jpg`) — defines the device frame rendering and overall visual style that must be consistent across the entire set
 3. The **approved design** (the version the user liked best for this specific screenshot) — anchors the creative direction and breakout element approach
+
+```bash
+SKILL_DIR="$HOME/.claude/skills/aso-appstore-screenshots" && \
+python3 "$SKILL_DIR/enhance.py" \
+  --provider "$PROVIDER" \
+  --api-key "$API_KEY" \
+  --prompt "PROMPT_HERE" \
+  --images screenshots/0N-[slug]/scaffold.png screenshots/final/01-[first-slug].jpg screenshots/0N-[slug]/v2-resized.jpg \
+  --outputs screenshots/0N-[slug]/v1.jpg screenshots/0N-[slug]/v2.jpg screenshots/0N-[slug]/v3.jpg \
+  --aspect-ratio "9:16" \
+  --resolution "4K"
+```
 
 The prompt should reference all three:
 ```
@@ -448,7 +492,7 @@ Generate a new version that keeps the layout from the scaffold, the device frame
 
 This prevents drift (scaffold keeps layout locked), maintains set-wide consistency (style template keeps device frame and visual treatment identical), and preserves the creative direction the user already approved.
 
-When iterating, generate **3 versions in parallel** again (3 parallel `edit_image` calls in a single message). Then **immediately run the Step 3 crop/resize loop on all 3 in a single Bash call** before showing the user.
+When iterating, generate **3 versions** again via enhance.py. Then **immediately run the Step 3 crop/resize loop on all 3 in a single Bash call** before showing the user.
 
 Repeat until the user is happy.
 

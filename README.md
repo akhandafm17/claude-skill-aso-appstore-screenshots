@@ -6,15 +6,18 @@ A Claude Code skill that generates high-converting App Store screenshots for you
 
 1. **Benefit Discovery** — Analyzes your app's codebase to identify the 3-5 core benefits that drive downloads
 2. **Screenshot Pairing** — Reviews your simulator screenshots, rates them, and pairs each with the best benefit
-3. **Generation** — Creates polished App Store screenshots using a two-stage process: deterministic scaffolding (compose.py) + AI enhancement (Nano Banana Pro via Gemini MCP)
+3. **Generation** — Creates polished App Store screenshots using a two-stage process: deterministic scaffolding (compose.py) + AI enhancement (Nano Banana Pro via fal.ai or Replicate)
 4. **Showcase** — Generates a preview image with all screenshots side-by-side
 
 ## Installation
 
 ### 1. Add the skill to Claude Code
 
+Copy the skill into your Claude Code skills directory:
+
 ```bash
-claude install-skill github.com/adamlyttleapps/claude-skill-aso-appstore-screenshots
+git clone https://github.com/adamlyttleapps/claude-skill-aso-appstore-screenshots.git \
+  ~/.claude/skills/aso-appstore-screenshots
 ```
 
 ### 2. Install Python dependencies
@@ -31,15 +34,19 @@ The skill uses **SF Pro Display Black** for headline text. On macOS, install it 
 /Library/Fonts/SF-Pro-Display-Black.otf
 ```
 
-### 4. Set up Gemini MCP (for AI enhancement)
+### 4. Get an API key (for AI enhancement)
 
-The generation phase requires [@houtini/gemini-mcp](https://www.npmjs.com/package/@houtini/gemini-mcp) to be configured as an MCP server in Claude Code:
+The generation phase uses Nano Banana Pro for AI enhancement. You need an API key from one of these platforms:
 
-```bash
-npm install -g @houtini/gemini-mcp
-```
+**fal.ai** (recommended):
+1. Sign up at [fal.ai](https://fal.ai)
+2. Create an API key at [fal.ai/dashboard/keys](https://fal.ai/dashboard/keys)
 
-Then add it to your Claude Code MCP config (`~/.claude/settings.json` or project `.mcp.json`).
+**Replicate**:
+1. Sign up at [replicate.com](https://replicate.com)
+2. Create a token at [replicate.com/account/api-tokens](https://replicate.com/account/api-tokens)
+
+The skill will ask for your API key when you reach the generation phase. Keys are used for the session only and never saved to disk.
 
 ## Usage
 
@@ -58,7 +65,7 @@ The skill will guide you through each phase interactively. Progress is saved to 
 Rather than generating screenshots from scratch (which produces inconsistent results), the skill uses a two-stage approach:
 
 1. **compose.py** creates a deterministic scaffold with exact text positioning, device frame, and your simulator screenshot composited inside
-2. **Nano Banana Pro** (via Gemini MCP) enhances the scaffold — adding a photorealistic device frame, breakout elements, and visual polish
+2. **enhance.py** sends the scaffold to Nano Banana Pro (via fal.ai or Replicate) — adding a photorealistic device frame, breakout elements, and visual polish
 
 This ensures consistent layout across all screenshots while letting AI handle the creative enhancement.
 
@@ -70,11 +77,11 @@ Screenshots are saved to a `screenshots/` directory in your project:
 screenshots/
   01-benefit-slug/          ← working versions
     scaffold.png            ← deterministic compose.py output
-    v1.png, v2.png, v3.png  ← AI-enhanced versions
-    v1-resized.png, ...     ← cropped to App Store dimensions
+    v1.jpg, v2.jpg, v3.jpg  ← AI-enhanced versions
+    v1-resized.jpg, ...     ← cropped to App Store dimensions
   final/                    ← approved screenshots, ready to upload
-    01-benefit-slug.png
-    02-benefit-slug.png
+    01-benefit-slug.jpg
+    02-benefit-slug.jpg
   showcase.png              ← preview image with all screenshots
 ```
 
@@ -86,6 +93,7 @@ The `final/` folder contains App Store-ready screenshots at exact Apple dimensio
 |------|---------|
 | `SKILL.md` | The skill prompt — defines the multi-phase workflow |
 | `compose.py` | Deterministic scaffold generator (Pillow-based) |
+| `enhance.py` | AI enhancement via fal.ai or Replicate (Nano Banana Pro) |
 | `generate_frame.py` | Generates the device frame template |
 | `showcase.py` | Generates the side-by-side showcase image |
 | `assets/device_frame.png` | Pre-rendered iPhone device frame template |
